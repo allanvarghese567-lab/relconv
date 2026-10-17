@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "relconv Schema Host",
+    "description": "Auth = single Bearer token (relconv1.key.ts.nonce.sig). Variables: baseUrl, keyId, secret",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://127.0.0.1:8000"},
+    {"key": "keyId", "value": "billing-api"},
+    {"key": "secret", "value": "dev-billing-secret"}
+  ],
+  "event": [{
+    "listen": "prerequest",
+    "script": {
+      "type": "text/javascript",
+      "exec": [
+        "const crypto = require('crypto');",
+        "const method = pm.request.method.toUpperCase();",
+        "const path = pm.request.url.getPath();",
+        "const qs = pm.request.url.getQueryString();",
+        "const pathQs = qs ? path + '?' + qs : path;",
+        "let body = '';",
+        "if (pm.request.body && pm.request.body.raw) { body = pm.request.body.raw; }",
+        "const keyId = pm.collectionVariables.get('keyId');",
+        "const secret = pm.collectionVariables.get('secret');",
+        "const ts = Math.floor(Date.now() / 1000).toString();",
+        "const nonce = crypto.randomBytes(16).toString('hex');",
+        "const bodyHash = crypto.createHash('sha256').update(body).digest('hex');",
+        "const msg = [method, pathQs, ts, nonce, bodyHash].join('\\n');",
+        "const sig = crypto.createHmac('sha256', secret).update(msg).digest('hex');",
+        "const token = ['relconv1', keyId, ts, nonce, sig].join('.');",
+        "pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + token });",
+        "pm.request.headers.upsert({ key: 'Content-Type', value: 'application/json' });",
+        "console.log('token pathQs=', pathQs);"
+      ]
+    }
+  }],
+  "item": [
+    {"name": "Health (no auth)", "request": {"method": "GET", "header": [], "url": "{{baseUrl}}/health"}},
+    {"name": "Admin stats (no auth)", "request": {"method": "GET", "header": [], "url": "{{baseUrl}}/admin/stats"}},
+    {"name": "Export schema (token)", "request": {"method": "GET", "header": [], "url": "{{baseUrl}}/internal/schema/export"}},
+    {"name": "Changes since 0 (token)", "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/internal/schema/changes?since=0", "host": ["{{baseUrl}}"], "path": ["internal", "schema", "changes"], "query": [{"key": "since", "value": "0"}]}}},
+    {"name": "Import models (token write)", "request": {"method": "POST", "header": [], "body": {"mode": "raw", "raw": "{\n  \"models\": [{\n    \"name\": \"tags\",\n    \"fields\": { \"id\": \"str\", \"label\": \"str\" },\n    \"relations\": {},\n    \"kinds\": [\"class\"]\n  }],\n  \"removed\": []\n}"}, "url": "{{baseUrl}}/internal/schema/import"}},
+    {"name": "Delete model (token write)", "request": {"method": "DELETE", "header": [], "url": "{{baseUrl}}/internal/schema/models/tags"}},
+    {"name": "Auth validate", "request": {"method": "POST", "header": [], "body": {"mode": "raw", "raw": "{\n  \"token\": \"paste-or-generate\",\n  \"method\": \"GET\",\n  \"path_qs\": \"/internal/schema/export\",\n  \"soft\": true\n}"}, "url": "{{baseUrl}}/internal/auth/validate"}},
+    {"name": "Admin add model (no token)", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"name\": \"tags\",\n  \"fields\": { \"id\": \"str\", \"label\": \"str\" },\n  \"relations\": {}\n}"}, "url": "{{baseUrl}}/admin/models"}}
+  ]
+}
